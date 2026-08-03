@@ -203,6 +203,12 @@ def _close_model_client(env):
         print(f"[main] failed to close model client: {e}")
 
 
+def _reuse_isaac_enabled() -> bool:
+    """Keep the Isaac Sim app alive between normal evaluation batches."""
+    value = os.environ.get("ROBODOJO_REUSE_ISAAC", "1").strip().lower()
+    return value not in {"0", "false", "no", "off"}
+
+
 def _restart_or_exit(env, simulation_app, fatal_msg):
     """Persist progress and either os.execv-restart or sys.exit(99).
 
@@ -251,6 +257,8 @@ def main():
     PhysX crash/resume recovery until the requested episode count is reached.
     """
     task_name = args_cli.task_name
+    reuse_isaac = _reuse_isaac_enabled()
+    print(f"[main] Isaac Sim reuse between normal batches: {reuse_isaac}", flush=True)
     num_envs = args_cli.num_envs
     eval_cfg_name = args_cli.env_cfg_type
     eval_cfg = load_yaml(os.path.join(ENV_CONFIG_PATH, eval_cfg_name + ".yml"))
@@ -436,7 +444,10 @@ def main():
             print("No more seeds to run, exiting.")
             break
 
-        env.close()
+        if reuse_isaac:
+            print("[main] keeping Isaac Sim alive for the next evaluation batch", flush=True)
+        else:
+            env.close()
 
     _delete_resume_manifest(env)
     _close_model_client(env)
