@@ -282,30 +282,30 @@ class VideoStreamWriter:
     def abort(self) -> None:
         """Stop encoding and remove a partial output file."""
         with self._state_lock:
-            if self._closed and self._done.is_set():
-                return
+            already_done = self._closed and self._done.is_set()
             self._closed = True
-        if self.proc is not None:
+        if not already_done and self.proc is not None:
             try:
                 self.proc.kill()
             except Exception:
                 pass
-        try:
-            self._frames.put_nowait(self._SENTINEL)
-        except queue.Full:
-            while True:
-                try:
-                    self._frames.get_nowait()
-                except queue.Empty:
-                    break
-                else:
-                    self._frames.task_done()
+        if not already_done:
             try:
                 self._frames.put_nowait(self._SENTINEL)
             except queue.Full:
-                pass
-        self._done.wait(timeout=5)
-        self._worker.join(timeout=5)
+                while True:
+                    try:
+                        self._frames.get_nowait()
+                    except queue.Empty:
+                        break
+                    else:
+                        self._frames.task_done()
+                try:
+                    self._frames.put_nowait(self._SENTINEL)
+                except queue.Full:
+                    pass
+            self._done.wait(timeout=5)
+            self._worker.join(timeout=5)
         self.proc = None
         try:
             if os.path.exists(self.out_path):
