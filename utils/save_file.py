@@ -44,22 +44,48 @@ def _resolve_video_codec() -> str:
         )
 
     nvenc_available = False
+    probe_error = ""
     ffmpeg = shutil.which("ffmpeg")
     if ffmpeg is not None:
         try:
+            # An encoder can be listed by ffmpeg even when the driver, GPU
+            # visibility, or NVENC build is unusable. Run one tiny real encode
+            # so auto mode cannot make the evaluation fail on first frame.
             probe = subprocess.run(
-                [ffmpeg, "-hide_banner", "-encoders"],
+                [
+                    ffmpeg,
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "color=c=black:s=16x16:d=0.1",
+                    "-frames:v",
+                    "1",
+                    "-an",
+                    "-c:v",
+                    "h264_nvenc",
+                    "-f",
+                    "null",
+                    "-",
+                ],
                 check=False,
                 capture_output=True,
-                text=True,
                 timeout=10,
             )
-            nvenc_available = "h264_nvenc" in (probe.stdout + probe.stderr)
+            nvenc_available = probe.returncode == 0
+            if not nvenc_available:
+                probe_error = probe.stderr.decode(errors="replace").strip().splitlines()[-1] if probe.stderr else "probe failed"
         except (OSError, subprocess.SubprocessError):
-            pass
+            probe_error = "probe failed"
 
     if requested in {"nvenc", "h264_nvenc"} and not nvenc_available:
-        print("[VideoStreamWriter] h264_nvenc is unavailable; falling back to libx264.", flush=True)
+        print(
+            "[VideoStreamWriter] h264_nvenc is unavailable; falling back to libx264"
+            f" ({probe_error}).",
+            flush=True,
+        )
     _VIDEO_CODEC = "h264_nvenc" if nvenc_available else "libx264"
     print(f"[VideoStreamWriter] selected codec={_VIDEO_CODEC}", flush=True)
     return _VIDEO_CODEC
