@@ -22,6 +22,20 @@ robodojo.sh server  ->  scripts/internal/run_policy_server.sh  ->  policy server
 robodojo.sh client  ->  scripts/eval_policy.sh  ->  src/eval_client/main.py
 ```
 
+## Evaluation performance controls
+
+Video recording uses a bounded asynchronous ffmpeg queue. `auto` performs a
+real NVENC probe and uses `h264_nvenc` when the driver supports it; otherwise
+it falls back to `libx264` without dropping frames.
+
+```bash
+export ROBODOJO_VIDEO_CODEC=auto       # auto, h264_nvenc, or libx264
+export ROBODOJO_REUSE_ISAAC=1          # keep Isaac Sim alive between batches
+```
+
+Set `ROBODOJO_REUSE_ISAAC=0` for a fresh Isaac Sim environment between normal
+evaluation batches when debugging task-state isolation.
+
 Run one or more official capability dimensions in a benchmark sweep:
 
 ```bash
